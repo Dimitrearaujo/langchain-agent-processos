@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Syntax check — todos os arquivos .py
+        run: |
+          python -m py_compile agent.py
+          python -m py_compile tools/knowledge_base.py
+          python -m py_compile tools/bottleneck_analyzer.py
+          python -m py_compile tools/doc_generator.py
+          python -m py_compile tools/roi_estimator.py
+          python -m py_compile memory/conversation.py
+          echo "Syntax check OK"
+
+      - name: Test — BottleneckAnalyzer
+        run: |
+          python -c "
+          import sys
+          sys.path.insert(0, '.')
+          from tools.bottleneck_analyzer import analyze_bottlenecks
+          import json
+
+          # Processo com varios gargalos
+          result = json.loads(analyze_bottlenecks(
+              'O processo manual leva 3 dias e passa por 4 departamentos com aprovacao final via email e planilha'
+          ))
+          assert 'gargalos' in result
+          assert 'sugestoes' in result
+          assert 'potencial_automacao' in result
+          assert len(result['gargalos']) >= 3, f'Esperado >= 3 gargalos, got {len(result[\"gargalos\"])}'
+          assert result['potencial_automacao'] == 'ALTO'
+
+          # Processo sem gargalos
+          result2 = json.loads(analyze_bottlenecks('processo eficiente'))
+          assert result2['potencial_automacao'] == 'BAIXO'
+
+          print('BottleneckAnalyzer: OK')
+          "
+
+      - name: Test — ROI Estimator
+        run: |
+          python -c "
+          import sys, json
+          sys.path.insert(0, '.')
+          from tools.roi_estimator import estimate_automation_roi
+
+          # ROI positivo
+          r = json.loads(estimate_automation_roi(json.dumps({
+              'horas_por_dia': 4,
+              'custo_hora': 80,
+              'reducao_percentual': 70,
+              'custo_implementacao': 5000
+          })))
+          assert 'economia_por_mes' in r
+          assert 'roi_12_meses' in r
+          assert 'recomendacao' in r
+          assert r['recomendacao'] == 'IMPLEMENTAR', f'Esperado IMPLEMENTAR, got {r[\"recomendacao\"]}'
+
+          # ROI negativo (longo payback)
+          r2 = json.loads(estimate_automation_roi(json.dumps({
+              'horas_por_dia': 0.5,
+              'custo_hora': 20,
+              'reducao_percentual': 30,
+              'custo_implementacao': 50000
+          })))
+          assert r2['recomendacao'] == 'REVISAR ESCOPO'
+
+          print('ROI Estimator: OK')
+          "
+
+      - name: Test — Doc Generator
+        run: |
+          python -c "
+          import sys, os, json
+          sys.path.insert(0, '.')
+          os.makedirs('./output', exist_ok=True)
+          from tools.doc_generator import generate_documentation
+
+          # Gera doc a partir de JSON
+          result = generate_documentation(json.dumps({
+              'processo': 'Onboarding de Clientes',
+              'gargalos': ['aprovacao manual', 'email sem rastreabilidade'],
+              'sugestoes': ['automatizar aprovacao', 'usar webhook']
+          }))
+          assert 'Documentacao gerada' in result
+          assert 'Onboarding' in result
+
+          # Gera doc a partir de texto puro (fallback)
+          result2 = generate_documentation('Processo de compras')
+          assert 'Documentacao gerada' in result2
+
+          print('Doc Generator: OK')
+          "
+
+      - name: Test — ConversationStore (SQLite)
+        run: |
+          python -c "
+          import sys, os
+          sys.path.insert(0, '.')
+          os.environ['DB_PATH'] = '/tmp/test_memory.db'
+          from memory.conversation import ConversationStore
+
+          store = ConversationStore()
+          store.save('pergunta de teste', 'resposta de teste')
+          rows = store.get_recent(5)
+          assert len(rows) >= 1
+          assert rows[0][0] == 'pergunta de teste'
+          assert rows[0][1] == 'resposta de teste'
+
+          # Multiplas entradas
+          store.save('segunda', 'resposta2')
+          rows2 = store.get_recent(5)
+          assert len(rows2) >= 2
+
+          print('ConversationStore: OK')
+          "
+
+      - name: Todos os testes passaram
+        run: echo "CI verde — LangChain Agent funcionando corretamente"
