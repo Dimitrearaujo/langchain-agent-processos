@@ -1,5 +1,10 @@
 # LangChain Agent — Automação Inteligente de Processos
 
+[![CI](https://github.com/Dimitrearaujo/langchain-agent-processos/actions/workflows/ci.yml/badge.svg)](https://github.com/Dimitrearaujo/langchain-agent-processos/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/Python-3.12-blue)
+![LangChain](https://img.shields.io/badge/LangChain-0.2%2B-green)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+
 Um **agente de IA para análise e automação de processos corporativos** usando LangChain + Python. Integra LLMs (Claude/GPT-4o) com ferramentas customizadas para identificar gargalos, sugerir melhorias e gerar documentação automaticamente.
 
 ## Quick Start
